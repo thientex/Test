@@ -77,7 +77,7 @@ jobs:
           testing: false
 
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Initialize Build Environment
         run: |
@@ -113,12 +113,9 @@ jobs:
           ccache --max-size=2G
           ccache --set-config=compression=true
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
-          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 > $BOOT_SIGN_KEY_PATH
-          git config --global user.name "BuildBot"
-          git config --global user.email "BuildGkiKernel@gmail.com"
 
       - name: Restore CCache
-        uses: actions/cache@v5
+        uses: actions/cache@v4
         with:
           path: ~/.ccache
           key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-${{ github.sha }}
@@ -131,6 +128,13 @@ jobs:
           BRANCH="main-kernel-build-2024"
           git clone $AOSP_MIRROR/kernel/prebuilts/build-tools -b $BRANCH --depth 1 kernel-build-tools
           git clone $AOSP_MIRROR/platform/system/tools/mkbootimg -b $BRANCH --depth 1 mkbootimg
+
+      - name: Generate Setup
+        run: |
+          mkdir -p "$(dirname "$BOOT_SIGN_KEY_PATH")"
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 > $BOOT_SIGN_KEY_PATH
+          git config --global user.name "BuildBot"
+          git config --global user.email "BuildGkiKernel@gmail.com"
 
       - name: Clone Dependencies
         run: |
@@ -267,8 +271,16 @@ jobs:
           fi
           sed -i 's/check_defconfig//' ./common/build.config.gki
 
+      - name: Set Custom Name
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            sed -i '$s|echo "\$res"|echo "${{ inputs.version }}"|' ./common/scripts/setlocalversion
+            sed -i '/^CONFIG_LOCALVERSION=/ s/="\([^"]*\)"/="${{ inputs.version }}"/' ./common/arch/arm64/configs/gki_defconfig || true
+          fi
+
       - name: Build Kernel
-        uses: nick-fields/retry@v4
+        uses: nick-fields/retry@v3
         with:
           timeout_minutes: 30
           max_attempts: 3
@@ -309,7 +321,7 @@ jobs:
             SRC_DIR="$KERNEL_ROOT/bazel-bin/common/kernel_aarch64"
           fi
           
-          # Copy images to AK3 and bootimgs folder
+          # Copy images
           cp "$SRC_DIR/Image" "$SRC_DIR/Image.lz4" ./bootimgs/
           cp "$SRC_DIR/Image" "$ANYKERNEL3/"
 
@@ -347,7 +359,7 @@ jobs:
           done
 
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: Custom_Kernel_${{ inputs.ksu_variant }}-${{ env.CONFIG }}
           path: |
