@@ -264,9 +264,6 @@ jobs:
         run: |
           cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_KSU=y
-          CONFIG_KPROBES=n
-          CONFIG_HAVE_KPROBES=n
-          CONFIG_KPROBE_EVENTS=n
           CONFIG_SECURITY_SELINUX_DEVELOP=y
           EOF
 
