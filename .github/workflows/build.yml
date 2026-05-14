@@ -62,7 +62,6 @@ jobs:
       CCACHE_HARDLINK: "true"
       SUKISU_COMMIT: ${{ inputs.sukisu_commit }}
       SUSFS_COMMIT: ${{ inputs.susfs_commit }}
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       KBUILD_BUILD_USER: "build-user"
       KBUILD_BUILD_HOST: "build-host"
 
@@ -86,7 +85,7 @@ jobs:
           testing: false
 
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Initialize Build Environment
         run: |
@@ -124,7 +123,7 @@ jobs:
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
 
       - name: Restore CCache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.ccache
           key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-${{ github.sha }}
@@ -175,6 +174,7 @@ jobs:
             sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" .repo/manifests/default.xml
           fi
           $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
+          cp "$DEFCONFIG" "$DEFCONFIG.orig"
 
       # ==========================================
       # Patching & Configuration
@@ -223,8 +223,6 @@ jobs:
             SUKI_ARGS="-s dev"
           fi
 
-          echo "Integrating ${{ inputs.ksu_variant }} (Branch: $TARGET_BRANCH)..."
-
           case "${{ inputs.ksu_variant }}" in
             "Official")
               curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/$TARGET_BRANCH/kernel/setup.sh" | bash -s $TARGET_BRANCH
@@ -240,13 +238,14 @@ jobs:
       - name: Apply SUSFS & Minimal Hooks
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
+          set -e
           if [ "${{ inputs.enable_susfs }}" == "true" ]; then
             cp $SUSFS4KSU/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./common/
             cp $SUSFS4KSU/kernel_patches/fs/* ./common/fs/
             cp $SUSFS4KSU/kernel_patches/include/linux/* ./common/include/linux/
             
             cd ./common
-            patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
+            patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch
             
             if [[ "${{ inputs.android_version }}" == "android12" && "${{ inputs.kernel_version }}" == "5.10" ]]; then
               [[ "${{ inputs.os_patch_level }}" == "2024-11" ]] && sed -i 's/vm_flags_clear(new_vma, VM_PAD_MASK);/new_vma->vm_flags \&= ~VM_PAD_MASK;/' ./mm/mmap.c || true
@@ -254,7 +253,7 @@ jobs:
               CURRENT_SUB=$(grep '^SUBLEVEL = ' Makefile | awk '{print $3}')
               [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]] && CURRENT_SUB=99999
               if [ "$CURRENT_SUB" -le 209 ]; then
-                sed -i 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c || true
+                sed -i 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
               fi
             fi
             cd ..
@@ -328,11 +327,24 @@ jobs:
           echo "KBUILD_BUILD_USER=build-user" >> $GITHUB_ENV
           echo "KBUILD_BUILD_HOST=build-host" >> $GITHUB_ENV
 
+          f="./common/scripts/mkcompile_h"
+          if [ -f "$f" ]; then
+            if [[ "${{ inputs.kernel_version }}" == "5.10" || "${{ inputs.kernel_version }}" == "5.15" ]]; then
+              perl -pi -e "s{UTS_VERSION=\"\\\$\(echo \\\$UTS_VERSION \\\$CONFIG_FLAGS \\\$TIMESTAMP \\| cut -b -\\\$UTS_LEN\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $CURRENT_TIME\"}" "$f"
+            else
+              if grep -q 'UTS_VERSION=' "$f"; then
+                perl -pi -e "s{UTS_VERSION=\"\\\$\\\\(\\\\.\\\\*\\\\?\\\\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $CURRENT_TIME\"}" "$f"
+              else
+                perl -0777 -pi -e "s{cat <<EOF}{cat <<EOF\n#undef UTS_VERSION\n#define UTS_VERSION \"#1 SMP PREEMPT $CURRENT_TIME\" } unless /UTS_VERSION/" "$f"
+              fi
+            fi
+          fi
+
       # ==========================================
       # Compilation & Packing
       # ==========================================
       - name: Build Kernel
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 30
           max_attempts: 3
@@ -419,7 +431,7 @@ jobs:
           done
 
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: |
