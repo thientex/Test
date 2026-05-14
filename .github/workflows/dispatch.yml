@@ -1,4 +1,4 @@
-name: Ultimate Stealth Kernel - Dispatch
+name: Custom Kernel Build - Dispatch
 
 permissions:
   contents: write
@@ -70,19 +70,19 @@ on:
         type: string
         default: ""
 
-      # ==================== Stealth & Feature Toggles ====================
+      # ==================== Feature Toggles ====================
       enable_susfs:
-        description: "Enable SUSFS (Spoofing & Hiding)"
+        description: "Enable SUSFS"
         required: true
         type: boolean
         default: true
       enable_susfs_log:
-        description: "Enable SUSFS Logging (Debug Only - Set FALSE for Stealth)"
+        description: "Enable SUSFS Logging (Debug Only)"
         required: true
         type: boolean
         default: false
       enable_kpm:
-        description: "Enable Kernel Patch Module (Set FALSE for Stealth)"
+        description: "Enable Kernel Patch Module (KPM)"
         required: true
         type: boolean
         default: false
@@ -93,7 +93,7 @@ on:
         required: false
         type: string
       build_time:
-        description: "Custom Build Timestamp (Optional, empty = current UTC)"
+        description: "Custom Build Timestamp (Optional)"
         required: false
         type: string
         default: ""
@@ -104,7 +104,7 @@ on:
         default: true
 
 jobs:
-  build-stealth-kernel:
+  build-custom-kernel:
     name: "Build: ${{ inputs.kernel_version }}.${{ inputs.sub_level }} (${{ inputs.kernelsu_variant }})"
     uses: ./.github/workflows/build.yml
     secrets: inherit
