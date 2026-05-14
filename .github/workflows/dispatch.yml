@@ -7,7 +7,9 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      # ==================== Core Configurations ====================
+      # ==========================================
+      # Core Configurations
+      # ==========================================
       android_version:
         description: "Android Version"
         required: true
@@ -31,24 +33,31 @@ on:
           - "6.12"
         default: "5.10"
       sub_level:
-        description: "Kernel Sublevel (e.g., 236)"
+        description: "Kernel Sublevel"
         required: true
         type: string
         default: "236"
       os_patch_level:
-        description: "OS Security Patch Level (e.g., 2025-05)"
+        description: "OS Security Patch Level"
         required: true
         type: string
         default: "2025-05"
+      revision:
+        description: "Revision"
+        required: false
+        type: string
+        default: "r1"
 
-      # ==================== KernelSU Configurations ====================
+      # ==========================================
+      # KernelSU Configurations
+      # ==========================================
       kernelsu_variant:
         description: "KernelSU Variant"
         required: true
         type: choice
         options:
-          - SukiSU
           - Official
+          - SukiSU
           - ReSukiSU
         default: SukiSU
       kernelsu_branch:
@@ -60,48 +69,49 @@ on:
           - Dev
         default: Stable
       sukisu_commit:
-        description: "SukiSU Custom Commit Hash (Optional)"
+        description: "SukiSU Custom Commit Hash"
         required: false
         type: string
-        default: ""
       susfs_commit:
-        description: "SUSFS Custom Commit Hash (Optional)"
+        description: "SUSFS Custom Commit Hash"
         required: false
         type: string
-        default: ""
 
-      # ==================== Feature Toggles ====================
+      # ==========================================
+      # Feature Toggles
+      # ==========================================
       enable_susfs:
         description: "Enable SUSFS"
         required: true
         type: boolean
         default: true
       enable_susfs_log:
-        description: "Enable SUSFS Logging (Debug Only)"
+        description: "Enable SUSFS Logging"
         required: true
         type: boolean
         default: false
       enable_kpm:
-        description: "Enable Kernel Patch Module (KPM)"
+        description: "Enable KPM"
         required: true
         type: boolean
         default: false
 
-      # ==================== Build Extras ====================
+      # ==========================================
+      # Build Extras
+      # ==========================================
       version_name:
-        description: "Custom Version Name (Optional)"
+        description: "Custom Version Name"
         required: false
         type: string
       build_time:
-        description: "Custom Build Timestamp (Optional)"
+        description: "Custom Build Timestamp"
         required: false
         type: string
-        default: ""
       get_manager:
         description: "Fetch Manager APK"
         required: false
         type: boolean
-        default: true
+        default: false
 
 jobs:
   build-custom-kernel:
@@ -113,6 +123,7 @@ jobs:
       kernel_version: ${{ inputs.kernel_version }}
       sub_level: ${{ inputs.sub_level }}
       os_patch_level: ${{ inputs.os_patch_level }}
+      revision: ${{ inputs.revision || 'r1' }}
       ksu_variant: ${{ inputs.kernelsu_variant }}
       ksu_branch: ${{ inputs.kernelsu_branch }}
       sukisu_commit: ${{ inputs.sukisu_commit || '' }}
@@ -121,7 +132,7 @@ jobs:
       build_time: ${{ inputs.build_time || '' }}
       enable_susfs: ${{ inputs.enable_susfs }}
       enable_susfs_log: ${{ inputs.enable_susfs_log }}
-      use_kpm: ${{ inputs.enable_kpm }}
+      enable_kpm: ${{ inputs.enable_kpm }}
 
   get-ksu-manager:
     if: ${{ inputs.get_manager }}
