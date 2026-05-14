@@ -144,8 +144,14 @@ jobs:
           git clone https://github.com/WildKernels/AnyKernel3.git -b "gki-2.0"
           rm -rf AnyKernel3/.git
 
-          # Clone Official SUSFS directly from simonpunk
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
+          # Prioritize ShirkNeko's SUSFS for SukiSU compatibility, fallback to simonpunk
+          if [ "${{ inputs.ksu_variant }}" == "SukiSU" ]; then
+            git clone https://github.com/ShirkNeko/susfs4ksu.git -b "$SUSFS_BRANCH" 2>/dev/null || \
+            git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
+          else
+            git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
+          fi
+          
           if [ -n "${SUSFS_COMMIT}" ]; then
             git -C susfs4ksu checkout "$SUSFS_COMMIT"
           fi
@@ -171,10 +177,17 @@ jobs:
           STOCK_SRC="$GITHUB_WORKSPACE/config/stock_defconfig"
           STOCK_DST="$KERNEL_ROOT/common/arch/arm64/configs/stock_defconfig"
           TARGET_MAKEFILE="$KERNEL_ROOT/common/kernel/Makefile"
+          
           if [ -f "$STOCK_SRC" ]; then
             mkdir -p "$(dirname "$STOCK_DST")"
             cp "$STOCK_SRC" "$STOCK_DST"
-            sed -i "s|$(obj)/config_data: \$(KCONFIG_CONFIG) FORCE|$(obj)/config_data: arch/arm64/configs/stock_defconfig FORCE|" "$TARGET_MAKEFILE" || true
+            
+            OLD_RULE='$(obj)/config_data: $(KCONFIG_CONFIG) FORCE'
+            NEW_RULE='$(obj)/config_data: arch/arm64/configs/stock_defconfig FORCE'
+            if grep -qF "$OLD_RULE" "$TARGET_MAKEFILE"; then
+              sed -i "s|${OLD_RULE}|${NEW_RULE}|" "$TARGET_MAKEFILE"
+              echo "✅ Stock config spoofing applied successfully."
+            fi
           fi
 
       - name: Fix glibc 2.38 Compatibility
@@ -206,13 +219,19 @@ jobs:
             cp $SUSFS4KSU/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./common/
             cp $SUSFS4KSU/kernel_patches/fs/* ./common/fs/
             cp $SUSFS4KSU/kernel_patches/include/linux/* ./common/include/linux/
+            
             cd ./common
             patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
             
-            # Base Android 12 - 5.10 Fixes
             if [[ "${{ inputs.android_version }}" == "android12" && "${{ inputs.kernel_version }}" == "5.10" ]]; then
               [[ "${{ inputs.os_patch_level }}" == "2024-11" ]] && sed -i 's/vm_flags_clear(new_vma, VM_PAD_MASK);/new_vma->vm_flags \&= ~VM_PAD_MASK;/' ./mm/mmap.c || true
-              sed -i 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c || true
+              
+              # Tối ưu an toàn cho show_pad (Chỉ áp dụng cho Sublevel cũ)
+              CURRENT_SUB=$(grep '^SUBLEVEL = ' Makefile | awk '{print $3}')
+              [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]] && CURRENT_SUB=99999
+              if [ "$CURRENT_SUB" -le 209 ]; then
+                sed -i 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c || true
+              fi
             fi
             cd ..
           fi
