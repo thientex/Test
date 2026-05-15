@@ -26,7 +26,6 @@ jobs:
       ksuVer: ${{ steps.get_version.outputs.kversion }}
       susVer: ${{ steps.get_version.outputs.sversion }}
     env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
@@ -139,7 +138,7 @@ jobs:
       # 5. Upload Artifacts
       # ==========================================
       - name: Upload Manager APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.kernelsu_variant }}-Manager_v${{ env.KSU_VERSION }}
           path: manager-apk/**/*.apk
@@ -147,7 +146,7 @@ jobs:
 
       - name: Upload SUSFS Module
         if: steps.fetch_susfs.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: SUSFS-Module_${{ env.SUSFS_NAME }}
           path: susfs-module/*
