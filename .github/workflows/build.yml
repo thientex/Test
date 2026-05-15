@@ -57,6 +57,7 @@ jobs:
     timeout-minutes: 60
 
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
       CCACHE_HARDLINK: "true"
@@ -85,7 +86,7 @@ jobs:
           testing: false
 
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Initialize Build Environment
         run: |
@@ -428,10 +429,10 @@ jobs:
           done
 
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: |
             *AnyKernel3.zip
             *.img
-          compression-level: 0
+          compression-level: 9
