@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       # ==========================================
-      # Core Configurations
+      # 1. Core Configurations
       # ==========================================
       android_version:
         description: "Android Version"
@@ -49,7 +49,7 @@ on:
         default: "r1"
 
       # ==========================================
-      # KernelSU Configurations
+      # 2. KernelSU Configurations
       # ==========================================
       kernelsu_variant:
         description: "KernelSU Variant"
@@ -78,7 +78,7 @@ on:
         type: string
 
       # ==========================================
-      # Feature Toggles
+      # 3. Feature Toggles
       # ==========================================
       enable_susfs:
         description: "Enable SUSFS"
@@ -97,7 +97,7 @@ on:
         default: false
 
       # ==========================================
-      # Build Extras
+      # 4. Build Extras
       # ==========================================
       version_name:
         description: "Custom Version Name"
@@ -123,18 +123,19 @@ jobs:
       kernel_version: ${{ inputs.kernel_version }}
       sub_level: ${{ inputs.sub_level }}
       os_patch_level: ${{ inputs.os_patch_level }}
-      revision: ${{ inputs.revision || 'r1' }}
+      revision: ${{ inputs.revision }}
       ksu_variant: ${{ inputs.kernelsu_variant }}
       ksu_branch: ${{ inputs.kernelsu_branch }}
-      sukisu_commit: ${{ inputs.sukisu_commit || '' }}
-      susfs_commit: ${{ inputs.susfs_commit || '' }}
-      version: ${{ inputs.version_name || '' }}
-      build_time: ${{ inputs.build_time || '' }}
+      sukisu_commit: ${{ inputs.sukisu_commit }}
+      susfs_commit: ${{ inputs.susfs_commit }}
+      version: ${{ inputs.version_name }}
+      build_time: ${{ inputs.build_time }}
       enable_susfs: ${{ inputs.enable_susfs }}
       enable_susfs_log: ${{ inputs.enable_susfs_log }}
       enable_kpm: ${{ inputs.enable_kpm }}
 
   get-ksu-manager:
+    name: "Fetch APK: ${{ inputs.kernelsu_variant }}"
     if: ${{ inputs.get_manager }}
     uses: ./.github/workflows/get-manager.yml
     secrets: inherit

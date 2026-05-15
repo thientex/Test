@@ -67,7 +67,7 @@ jobs:
 
     steps:
       # ==========================================
-      # Environment Setup
+      # 1. Environment & Tool Setup
       # ==========================================
       - name: Free Disk Space
         uses: endersonmenezes/free-disk-space@v3
@@ -108,7 +108,7 @@ jobs:
           EOF
 
           mkdir -p "$GITHUB_WORKSPACE/git-repo"
-          curl -L https://storage.googleapis.com/git-repo-downloads/repo -o "$GITHUB_WORKSPACE/git-repo/repo"
+          curl -LSs https://storage.googleapis.com/git-repo-downloads/repo -o "$GITHUB_WORKSPACE/git-repo/repo"
           chmod 0755 "$GITHUB_WORKSPACE/git-repo/repo"
           echo "$GITHUB_WORKSPACE/git-repo" >> "$GITHUB_PATH"
           echo "REPO=$GITHUB_WORKSPACE/git-repo/repo" >> $GITHUB_ENV
@@ -123,29 +123,27 @@ jobs:
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
 
       - name: Restore CCache
-        uses: actions/cache@v5
+        uses: actions/cache@v4
         with:
           path: ~/.ccache
           key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-${{ github.sha }}
           restore-keys: |
             ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-
 
-      - name: Download Toolchains
+      - name: Download Toolchains & Setup Key
         run: |
           AOSP_MIRROR="https://android.googlesource.com"
           BRANCH="main-kernel-build-2024"
           git clone $AOSP_MIRROR/kernel/prebuilts/build-tools -b $BRANCH --depth 1 kernel-build-tools
           git clone $AOSP_MIRROR/platform/system/tools/mkbootimg -b $BRANCH --depth 1 mkbootimg
-
-      - name: Generate Setup
-        run: |
+          
           mkdir -p "$(dirname "$BOOT_SIGN_KEY_PATH")"
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 > $BOOT_SIGN_KEY_PATH
           git config --global user.name "build-user"
           git config --global user.email "build-user@build-host"
 
       # ==========================================
-      # Fetch Sources
+      # 2. Fetch Sources
       # ==========================================
       - name: Clone Dependencies
         run: |
@@ -177,7 +175,7 @@ jobs:
           cp "$DEFCONFIG" "$DEFCONFIG.orig"
 
       # ==========================================
-      # Patching & Configuration
+      # 3. Patching & Configuration
       # ==========================================
       - name: Apply Stock Config Spoofing
         run: |
@@ -249,7 +247,6 @@ jobs:
             
             if [[ "${{ inputs.android_version }}" == "android12" && "${{ inputs.kernel_version }}" == "5.10" ]]; then
               [[ "${{ inputs.os_patch_level }}" == "2024-11" ]] && sed -i 's/vm_flags_clear(new_vma, VM_PAD_MASK);/new_vma->vm_flags \&= ~VM_PAD_MASK;/' ./mm/mmap.c || true
-              
               CURRENT_SUB=$(grep '^SUBLEVEL = ' Makefile | awk '{print $3}')
               [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]] && CURRENT_SUB=99999
               if [ "$CURRENT_SUB" -le 209 ]; then
@@ -319,32 +316,31 @@ jobs:
 
           if [ -n "${{ inputs.build_time }}" ]; then
             CURRENT_TIME="${{ inputs.build_time }}"
+            EPOCH_TIME=$(date -d "$CURRENT_TIME" +"%s" 2>/dev/null || date +"%s")
           else
             CURRENT_TIME=$(date -u +"%a %b %d %H:%M:%S UTC %Y")
+            EPOCH_TIME=$(date +"%s")
           fi
 
           echo "KBUILD_BUILD_TIMESTAMP=$CURRENT_TIME" >> $GITHUB_ENV
-          echo "KBUILD_BUILD_USER=build-user" >> $GITHUB_ENV
-          echo "KBUILD_BUILD_HOST=build-host" >> $GITHUB_ENV
+          echo "SOURCE_DATE_EPOCH=$EPOCH_TIME" >> $GITHUB_ENV
 
           f="./common/scripts/mkcompile_h"
           if [ -f "$f" ]; then
-            if [[ "${{ inputs.kernel_version }}" == "5.10" || "${{ inputs.kernel_version }}" == "5.15" ]]; then
-              perl -pi -e "s{UTS_VERSION=\"\\\$\(echo \\\$UTS_VERSION \\\$CONFIG_FLAGS \\\$TIMESTAMP \\| cut -b -\\\$UTS_LEN\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $CURRENT_TIME\"}" "$f"
+            if grep -q 'echo \\#define UTS_VERSION' "$f"; then
+              sed -i 's/^echo \\#define UTS_VERSION.*/echo \\#define UTS_VERSION \\"#1 SMP PREEMPT '"$CURRENT_TIME"'\\"/g' "$f"
+            elif grep -q 'UTS_VERSION=' "$f"; then
+              sed -i 's/^UTS_VERSION=.*/UTS_VERSION="#1 SMP PREEMPT '"$CURRENT_TIME"'"/g' "$f"
             else
-              if grep -q 'UTS_VERSION=' "$f"; then
-                perl -pi -e "s{UTS_VERSION=\"\\\$\\\\(\\\\.\\\\*\\\\?\\\\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $CURRENT_TIME\"}" "$f"
-              else
-                perl -0777 -pi -e "s{cat <<EOF}{cat <<EOF\n#undef UTS_VERSION\n#define UTS_VERSION \"#1 SMP PREEMPT $CURRENT_TIME\" } unless /UTS_VERSION/" "$f"
-              fi
+              perl -0777 -pi -e "s{cat <<EOF}{cat <<EOF\n#undef UTS_VERSION\n#define UTS_VERSION \"#1 SMP PREEMPT $CURRENT_TIME\" } unless /UTS_VERSION/" "$f"
             fi
           fi
 
       # ==========================================
-      # Compilation & Packing
+      # 4. Compilation & Packing
       # ==========================================
       - name: Build Kernel
-        uses: nick-fields/retry@v4
+        uses: nick-fields/retry@v3
         with:
           timeout_minutes: 30
           max_attempts: 3
@@ -355,7 +351,7 @@ jobs:
             sed -i -e 's/BUILD_SYSTEM_DLKM=1/BUILD_SYSTEM_DLKM=0/' -e '/MODULES_ORDER=android\/gki_aarch64_modules/d' -e '/KMI_SYMBOL_LIST_STRICT_MODE/d' ./common/build.config.gki.aarch64
 
             if [ -f "build/build.sh" ]; then
-              LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 KBUILD_BUILD_TIMESTAMP="$KBUILD_BUILD_TIMESTAMP" KBUILD_BUILD_USER="$KBUILD_BUILD_USER" KBUILD_BUILD_HOST="$KBUILD_BUILD_HOST" build/build.sh CC="/usr/bin/ccache clang" || exit 1
+              LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 KBUILD_BUILD_TIMESTAMP="$KBUILD_BUILD_TIMESTAMP" SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" KBUILD_BUILD_USER="$KBUILD_BUILD_USER" KBUILD_BUILD_HOST="$KBUILD_BUILD_HOST" build/build.sh CC="/usr/bin/ccache clang" || exit 1
             else
               FRAG="common/arch/arm64/configs/ksu.fragment"
               diff "$DEFCONFIG.orig" "$DEFCONFIG" | grep '^>' | sed 's/^> //; s/^[[:space:]]*//' > "$FRAG" || true
@@ -365,6 +361,7 @@ jobs:
               
               tools/bazel build \
                 --action_env=KBUILD_BUILD_TIMESTAMP="$KBUILD_BUILD_TIMESTAMP" \
+                --action_env=SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" \
                 --action_env=KBUILD_BUILD_USER="$KBUILD_BUILD_USER" \
                 --action_env=KBUILD_BUILD_HOST="$KBUILD_BUILD_HOST" \
                 --disk_cache=/home/runner/.cache/bazel \
@@ -437,4 +434,4 @@ jobs:
           path: |
             *AnyKernel3.zip
             *.img
-          compression-level: 9
+          compression-level: 0
