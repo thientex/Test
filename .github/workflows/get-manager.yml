@@ -26,6 +26,7 @@ jobs:
       ksuVer: ${{ steps.get_version.outputs.kversion }}
       susVer: ${{ steps.get_version.outputs.sversion }}
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
@@ -87,7 +88,7 @@ jobs:
             "https://api.github.com/repos/$REPO/actions/workflows/build-manager.yml/runs?status=success&per_page=1" | jq -r '.workflow_runs[0].id')
           
           if [ "$BUILD_ID" == "null" ] || [ -z "$BUILD_ID" ]; then
-            echo "Could not find a successful manager build."
+            echo "[ERROR] Could not find a successful manager build."
             exit 1
           fi
 
@@ -95,7 +96,7 @@ jobs:
             "https://api.github.com/repos/$REPO/actions/runs/$BUILD_ID/artifacts" | jq -r '.artifacts[] | select(.name | ascii_downcase | contains("manager")) | .archive_download_url' | head -n 1)
 
           if [ -z "$ARTIFACT_URL" ]; then
-            echo "Artifact not found."
+            echo "[ERROR] Artifact not found."
             exit 1
           fi
 
@@ -138,16 +139,16 @@ jobs:
       # 5. Upload Artifacts
       # ==========================================
       - name: Upload Manager APK
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.kernelsu_variant }}-Manager_v${{ env.KSU_VERSION }}
           path: manager-apk/**/*.apk
-          compression-level: 0
+          compression-level: 9
 
       - name: Upload SUSFS Module
         if: steps.fetch_susfs.outcome == 'success'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: SUSFS-Module_${{ env.SUSFS_NAME }}
           path: susfs-module/*
-          compression-level: 0
+          compression-level: 9
